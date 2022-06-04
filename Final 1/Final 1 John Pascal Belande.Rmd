@@ -1,0 +1,241 @@
+---
+title: "Devoir Final 1"
+author: "D. John Pascal Belande"
+date: '2022-06-04'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Informatique pour Sciences sociales
+##Devoir final 1
+
+Le travail demandé pour ce devoir est d'utiliser les données du documents excel agregats monetaires disponible sur le site de la BRH d'en tirer 3 variables et ensuite d'effectuer toute une serie de test sur ces variables.
+
+Pour effectuer ce travail, on fera:
+- Une importation des donneés
+- Un netoyage des données
+- Les differents graphes
+- Les differents tests
+
+
+```{r cars}
+###lancements des differents packages utilisé pour le devoir
+library(tidyverse)
+library(readxl)
+library(tseries)
+library(lmtest)
+
+########importation des données
+
+lienurl<-"https://www.brh.ht/wp-content/uploads/agregatsmon.xls"
+GET(lienurl,
+    write_disk(tf<-tempfile(fileext="agregatsmon.xls")))
+agregat<-read_excel(tf,1L)
+agregat
+
+ ####transformation et netoyage des données
+agregat<-data.frame(agregat)
+
+colnames(agregat)<-agregat[2,]  #####utilisation d'une ligne comme nom des autres lignes
+
+####creation d'un data frame avec les variables choisis.
+####on a elimine les lignes et colones non necessaire
+travail<-agregat[26:520,c(1,4,12,14)]
+
+####renomer les collones du dataframe
+colnames(travail)<-c("Date","M3_M.G.","Base_Monetaire_M.G.","Monnaie_en_Circulation_M.G.")
+
+str(travail)
+
+####apres avoir explorer le data frame les donnes ont ete vu en format characteres on les converti donc en format numerique
+travail$Date <- as.numeric(travail$Date)
+travail$Base_Monetaire_M.G. <- as.numeric(travail$Base_Monetaire_M.G.)
+travail$Monnaie_en_Circulation_M.G. <- as.numeric(travail$Monnaie_en_Circulation_M.G.)
+travail$M3_M.G. <- as.numeric(travail$M3_M.G.)
+
+str(travail)
+####pour coriger les date et les afficher corectement
+travail$Date <- as.Date(travail$Date,origin = "1899-12-30")
+str(travail)
+####apres exploration, certaines dtes ne sont pas affiche, on corige donc le probleme manuelement
+travail$Date[309] <- "2004-07-01"
+travail$Date[310] <- "2004-08-01"
+travail$Date[311] <- "2004-09-01"
+travail$Date[312] <- "2004-10-01"
+travail$Date[313] <- "2004-11-01"
+travail$Date[314] <- "2004-12-01"
+
+travail$Date[315] <- "2005-01-01"
+travail$Date[316] <- "2005-02-01"
+travail$Date[317] <- "2005-03-01"
+travail$Date[318] <- "2005-04-01"
+travail$Date[319] <- "2005-05-01"
+travail$Date[320] <- "2005-06-01"
+
+travail$Date[360] <- "2008-10-01"
+travail$Date[361] <- "2008-11-01"
+travail$Date[362] <- "2008-12-01"
+
+travail$Date[363] <- "2009-01-01"
+travail$Date[364] <- "2009-02-01"
+
+
+str(travail)
+```
+
+Pour les 3 variables choisi, il nous a été demandé de:
+
+- vérifier si elles sont stationnaires en niveau ou en différence premiere ou deuxieme
+- vérifier les sens de la causalité, au sens de Granger, entre ces trois variables
+- réaliser une regression linéaire tenant compte des résultats des tests de causalité
+
+Pour ce faire, nous avons choisi comme variable
+- La base mpnetaire
+- la masse mometaire en circulation
+- M3
+Le tout exprimé en million de gourdes
+
+###Test de stationarite
+
+A time series is said to be “stationary” if it has no trend, exhibits constant variance over time, and has a constant autocorrelation structure over time.
+
+One way to test whether a time series is stationary is to perform an augmented Dickey-Fuller test, which uses the following null and alternative hypotheses:
+
+$H_0$: The time series is non-stationary. In other words, it has some time-dependent structure and does not have constant variance over time.
+
+$H_A$: The time series is stationary.
+
+To perform an augmented Dickey-Fuller test, we can use the adf.test() function from the tseries library. 
+
+Source: https://www.statology.org/dickey-fuller-test-in-r/
+
+```{r pressure, echo=FALSE}
+ggplot(travail, aes(x = Date, y = Base_Monetaire_M.G.))+
+  geom_line()+
+  labs(title = " Base monetaire en million de gourdes")
+
+adf.test(travail$Base_Monetaire_M.G.)
+
+```
+
+```{r pressure, echo=FALSE}
+ggplot(travail, aes(x = Date, y = Monnaie_en_Circulation_M.G.))+
+  geom_line()+
+  labs(title = "Monnaie en Circulation en Million de Gourdes")
+
+adf.test(travail$Monnaie_en_Circulation_M.G.)
+
+```
+
+```{r pressure, echo=FALSE}
+ggplot(travail, aes(x = Date, y = M3_M.G.))+
+  geom_line()+
+  labs(title = " Aggregat monetaire M3 en million de gourdes")
+
+adf.test(travail$M3_M.G.)
+
+```
+Avec une p-value plus grande que le taux d'erreur de 5%, il n'y a pas d'assez de preuves pour rejetter l'hypothese nulle de non-stationnarite des trois variables. Les variables sont donc non-stationnaires en niveau.
+
+
+
+
+
+###Test de stationnarite en difference
+
+Le test de stationarité permet de mesurer à quel point les variables sont liés au temps
+
+A concept that is closely related to stationarity is order of integration, which is how many times we need to difference a series until it becomes stationary. 
+
+A series is I(0), that is, integrated of order  0  if it is already stationary (it is stationary in levels, not in differences); a series is I(1) if it is nonstationary in levels, but stationary in its first differences.
+
+source: https://bookdown.org/ccolonescu/RPoE4/time-series-nonstationarity.html
+
+```{r pressure, echo=FALSE}
+g1<- diff(travail$Base_Monetaire_M.G.)
+plot(g1, ylab = "Base Monetaire en million de gourdes.")
+adf.test(g1, k=2)
+
+g2<- diff(travail$Monnaie_en_Circulation_M.G.)
+plot(g2, ylab = "Monnaie en Circulation en million de gourdes")
+adf.test(g2, k=2)
+
+g3<- diff(travail$M3_M.G.)
+plot(g3, ylab = "Agregat monetaire M3 en million de gourdes")
+adf.test(g3, k=2)
+
+```
+Grace à ce nouveau test on voit que les p-value sont tous inferieures au risque $\alpha$ = 0.05, par consequent on rejette l'hypothese nulle de non-stationnarite en difference. Les trois variables sont donc stationnaires en difference premiere ou deuxieme.
+
+Cette conclusion est verifiable par les graphes. On peut observer la converge des points pour chaque variable, moins de variation donc une stationnarite.
+
+
+
+
+### 2. Test de causalite, au sens de Granger
+
+Le test de Granger permet de mesurer l'incidence de variable l'une sur l'autre.
+
+
+Granger-Causality Test in R, The Granger Causality test is used to examine if one time series may be used to forecast another.
+
+Null Hypothesis (H0):
+
+Time series X does not cause time series Y to Granger-cause itself.
+
+Alternative Hypothesis (H1):
+
+Time series X  cause time series Y to Granger-cause itself.
+
+Knowing the value of a time series X at a given lag is valuable for forecasting the value of a time series Y at a later time period is referred to as “Granger-causes.”
+
+This test generates an F test statistic along with a p-value.
+
+We can reject the null hypothesis and infer that time series X Granger causes time series Y if the p-value is less than a particular significance level (e.g. =.05).
+
+In R, we may use the grangertest() function from the lmtest package to perform a Granger-Causality test, which has the following syntax:
+
+grangertest(X, Y, order = 1)
+
+where:
+
+X: This is the very first time series.
+
+Y: The second set of the time series
+
+order: In the first time series, the number of lags to utilize. The default value is 1.
+
+Source: https://www.r-bloggers.com/2021/11/granger-causality-test-in-r-with-example/
+
+```{r pressure, echo=FALSE}
+grangertest(M3_M.G. ~ Base_Monetaire_M.G., data = travail, order = 1)
+grangertest(M3_M.G. ~ Base_Monetaire_M.G., data = travail, order = 2)
+
+grangertest(Monnaie_en_Circulation_M.G. ~ Base_Monetaire_M.G., data = travail, order = 1)
+grangertest(Monnaie_en_Circulation_M.G. ~ Base_Monetaire_M.G., data = travail, order = 2)
+
+grangertest(Base_Monetaire_M.G. ~ M3_M.G., data = travail, order = 1)
+grangertest(Base_Monetaire_M.G. ~ M3_M.G., data = travail, order = 2)
+
+grangertest(Base_Monetaire_M.G. ~ Monnaie_en_Circulation_M.G., data = travail, order = 1)
+grangertest(Base_Monetaire_M.G. ~ Monnaie_en_Circulation_M.G., data = travail, order = 2)
+
+```
+
+Si les p-value > $\alpha$ = 0.05, il n'y a pas assez d'evidences pour rejetter l'hypothese nulle de non-causalite au sens de Granger.
+
+###Estimation
+```{r pressure, echo=FALSE}
+estimation <- lm(M3_M.G. ~ Base_Monetaire_M.G., Monnaie_en_Circulation_M.G., data = travail)
+summary(estimation)$coef
+
+```
+
+```{r pressure, echo=FALSE}
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
